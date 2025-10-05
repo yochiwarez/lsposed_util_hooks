@@ -1,0 +1,56 @@
+//bloquear todo menos ...
+
+
+package com.yochiwarez.revooptimizer;
+
+import de.robv.android.xposed.IXposedHookLoadPackage;
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import java.net.HttpURLConnection;
+
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+
+public class RevoHook implements IXposedHookLoadPackage {
+    @Override
+    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+        // Solo para la app del gym
+        if (!lpparam.packageName.equals("com.arceus.revosport")) {
+            return;
+        }
+        final ClassLoader cl = lpparam.classLoader;
+
+
+        // Hook de llamadas HTTP
+        XposedBridge.hookAllMethods(
+                cl.loadClass("okhttp3.internal.connection.RealCall"),
+                "enqueue",
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        Object call = param.thisObject;
+                        Object originalRequest = XposedHelpers.getObjectField(call, "originalRequest");
+
+                        if (originalRequest == null) {
+                            return; // evitar null pointer
+                        }
+
+                        String url = XposedHelpers.callMethod(originalRequest, "url").toString();
+
+                        // Permitir solo las llamadas que contengan /api-rest/api/asesoria/
+                        if (url.contains("/api-rest/api/asesoria/")) {
+                            XposedBridge.log("✅ Permitida: " + url);
+                            return;
+                        }
+
+                        // Bloquear todo lo demás
+                        XposedBridge.log("⛔ Bloqueada: " + url);
+                        param.setResult(null);
+                    }
+                }
+        );
+    }
+}
