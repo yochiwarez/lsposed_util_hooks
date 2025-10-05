@@ -1,0 +1,110 @@
+// detectar que libreria esta cargando imagenes, ya sea nativa o glide o picaso etc...
+
+package com.yochiwarez.revohello;
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+
+import java.io.InputStream;
+
+import de.robv.android.xposed.IXposedHookLoadPackage;
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
+
+public class RevoHook implements IXposedHookLoadPackage {
+    @Override
+    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+        // Solo para la app del gym
+        if (!lpparam.packageName.equals("com.arceus.revosport")) {
+            return;
+        }
+
+        XposedBridge.log("RevoHello cargado en: " + lpparam.packageName);
+
+        try {
+            // --- Glide ---
+            Class<?> glideClass = lpparam.classLoader.loadClass("com.bumptech.glide.RequestBuilder");
+            XposedBridge.hookAllMethods(glideClass, "load", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.args[0] = "";
+                    XposedBridge.log("Bloque de Glide exitoso: load()");
+                }
+            });
+            XposedBridge.hookAllMethods(glideClass, "into", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.setResult(null);
+                    XposedBridge.log("Bloque de Glide exitoso: into()");
+                }
+            });
+
+        } catch (Throwable t) {
+            XposedBridge.log("Glide no detectado en esta app");
+        }
+
+        try {
+            // --- Picasso ---
+            Class<?> picassoClass = lpparam.classLoader.loadClass("com.squareup.picasso.Picasso");
+            XposedBridge.hookAllMethods(picassoClass, "load", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.args[0] = "";
+                    XposedBridge.log("Bloque de Picasso exitoso: load()");
+                }
+            });
+        } catch (Throwable t) {
+            XposedBridge.log("Picasso no detectado en esta app");
+        }
+
+        try {
+            // --- Fresco ---
+            Class<?> frescoClass = lpparam.classLoader.loadClass("com.facebook.drawee.view.SimpleDraweeView");
+            XposedBridge.hookAllMethods(frescoClass, "setImageURI", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.args[0] = null;
+                    XposedBridge.log("Bloque de Fresco exitoso: setImageURI()");
+                }
+            });
+        } catch (Throwable t) {
+            XposedBridge.log("Fresco no detectado en esta app");
+        }
+
+        try {
+            // --- Coil ---
+            Class<?> coilClass = lpparam.classLoader.loadClass("coil.request.ImageRequest$Builder");
+            XposedBridge.hookAllMethods(coilClass, "data", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.args[0] = null;
+                    XposedBridge.log("Bloque de Coil exitoso: data()");
+                }
+            });
+        } catch (Throwable t) {
+            XposedBridge.log("Coil no detectado en esta app");
+        }
+
+        try {
+            // --- Android nativo (BitmapFactory) ---
+            XposedBridge.hookAllMethods(BitmapFactory.class, "decodeStream", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.setResult(null);
+                    XposedBridge.log("Bloque nativo exitoso: BitmapFactory.decodeStream()");
+                }
+            });
+            XposedBridge.hookAllMethods(BitmapFactory.class, "decodeFile", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.setResult(null);
+                    XposedBridge.log("Bloque nativo exitoso: BitmapFactory.decodeFile()");
+                }
+            });
+        } catch (Throwable t) {
+            XposedBridge.log("BitmapFactory hook falló: " + t);
+        }
+    }
+}
