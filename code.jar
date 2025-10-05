@@ -1,0 +1,47 @@
+// hock para analizar trafico de okhttp:
+
+package com.yochiwarez.revooptimizer;
+
+import de.robv.android.xposed.IXposedHookLoadPackage;
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import java.net.HttpURLConnection;
+
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+
+public class RevoHook implements IXposedHookLoadPackage {
+    @Override
+    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+        // Solo para la app del gym
+        if (!lpparam.packageName.equals("com.arceus.revosport")) {
+            return;
+        }
+        final ClassLoader cl = lpparam.classLoader;
+
+
+        // Hook a OkHttp Response.body()
+        Class<?> responseClass = lpparam.classLoader.loadClass("okhttp3.Response");
+        XposedBridge.hookAllMethods(responseClass, "body", new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                Object response = param.thisObject; // objeto Response
+                Object request = XposedHelpers.callMethod(response, "request");
+                String url = (request != null) ? XposedHelpers.callMethod(request, "url").toString() : "unknown";
+
+
+                // Solo registrar si no se bloqueó
+                Object body = param.getResult();
+                if (body != null) {
+                    Object contentTypeObj = XposedHelpers.callMethod(body, "contentType");
+                    String contentType = (contentTypeObj != null) ? contentTypeObj.toString() : "unknown";
+                    long length = (long) XposedHelpers.callMethod(body, "contentLength");
+                    XposedBridge.log("📥 OkHttp Descarga: URL=" + url + " | Tipo=" + contentType + " | Tamaño=" + length + " bytes");
+                }
+            }
+        });
+    }
+}
