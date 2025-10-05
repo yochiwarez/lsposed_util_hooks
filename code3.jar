@@ -1,0 +1,83 @@
+//bloquea antes de carga de la lista
+
+package com.yochiwarez.revooptimizer;
+
+import de.robv.android.xposed.IXposedHookLoadPackage;
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import java.net.HttpURLConnection;
+
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+
+public class RevoHook implements IXposedHookLoadPackage {
+    @Override
+    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+        // Solo para la app del gym
+        if (!lpparam.packageName.equals("com.arceus.revosport")) {
+            return;
+        }
+        final ClassLoader cl = lpparam.classLoader;
+
+
+        //tratar de detectar que esta usando para los fragmentos, en este caso react natives
+        //esto no tiene nada que ver con el codigo y puede ser eliminado
+        XposedBridge.hookAllConstructors(
+                cl.loadClass("androidx.fragment.app.Fragment"),
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        XposedBridge.log("🧩 Fragment creado: " + param.thisObject.getClass().getName());
+                    }
+                }
+        );
+
+
+        
+
+        //eso si es importante
+        XposedBridge.hookAllMethods(
+                cl.loadClass("okhttp3.internal.connection.RealCall"),
+                "enqueue",
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        Object call = param.thisObject;
+                        Object originalRequest = XposedHelpers.getObjectField(call, "originalRequest");
+                        String url = (originalRequest != null)
+                                ? XposedHelpers.callMethod(originalRequest, "url").toString()
+                                : "unknown";
+
+                        String[] bloqueadas = new String[]{
+                                "/api-rest/api/contenidoMultimedia/",
+                                //"/api-rest/api/asesoria/", //esta no debes bloquearla
+                                "/api-rest/api/antropometria/",
+                                "/api-rest/api/pesoCorporal/",
+                                "/api-rest/api/registroPasos/",
+                                "/api-rest/api/configuracionCRM/",
+                                "/api-rest/api/sede/",
+                                "/api-rest/api/reservasTurnos/",
+                                "/api-rest/api/entrenamiento/",
+                                "/api-rest/api/objetivoNutricion/",
+                                "/api-rest/api/documento/",
+                                "/api-rest/api/receta/",
+                                "/api-rest/api/nutricion/",
+                                "/api-rest/api/chat"
+                        };
+
+                        for (String filtro : bloqueadas) {
+                            if (url.contains(filtro)) {
+                                XposedBridge.log("⛔ Bloqueada ANTES DE SALIR: " + url);
+                                // cancelar ejecución: no se abrirá socket
+                                param.setResult(null);
+                                return;
+                            }
+                        }
+                    }
+                }
+        );
+    }
+}
