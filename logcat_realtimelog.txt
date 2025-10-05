@@ -1,0 +1,3 @@
+// con este comando podras ver los logs de lsposed en tiempo real en windows
+
+adb logcat | findstr LSPosed-Bridge
