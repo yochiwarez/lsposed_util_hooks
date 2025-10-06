@@ -1,0 +1,85 @@
+// evitar duplicados por tiempo 50 ms
+
+package com.yochiwarez.revooptimizer;
+
+import de.robv.android.xposed.IXposedHookLoadPackage;
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import java.net.HttpURLConnection;
+import java.util.HashMap;
+
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+
+public class RevoHook implements IXposedHookLoadPackage {
+    @Override
+    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+        // Solo para la app del gym
+        if (!lpparam.packageName.equals("com.arceus.revosport")) {
+            return;
+        }
+        final ClassLoader cl = lpparam.classLoader;
+
+
+        final HashMap<String, Long> lastRequestTime = new HashMap<>();
+        final long DUPLICATE_THRESHOLD_MS = 50; // umbral en milisegundos
+
+
+        XposedBridge.hookAllMethods(
+                cl.loadClass("okhttp3.internal.connection.RealCall"),
+                "enqueue",
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        Object call = param.thisObject;
+                        Object request = XposedHelpers.getObjectField(call, "originalRequest");
+
+                        if (request == null) return;
+
+                        String url = XposedHelpers.callMethod(request, "url").toString();
+                        String method = (String) XposedHelpers.callMethod(request, "method");
+
+                        // Filtrar solo nuestro endpoint
+                        if (!url.contains("/api-rest/api/asesoria/")){
+                            XposedBridge.log("❌ Cancelando request url no permitida: " + url);
+                            XposedHelpers.callMethod(call, "cancel");
+                            param.setResult(null);
+                            return;
+                        }
+
+                        long now = System.currentTimeMillis();
+                        Long lastTime = lastRequestTime.get(url);
+
+                        if (lastTime != null && (now - lastTime < DUPLICATE_THRESHOLD_MS)) {
+                            // Cancelar la segunda request
+                            XposedBridge.log("❌ Cancelando request duplicada: " + url);
+                            XposedHelpers.callMethod(call, "cancel");
+                            param.setResult(null); // detiene enqueue
+                            return;
+                        }
+
+                        // Guardar timestamp de esta request
+                        lastRequestTime.put(url, now);
+
+                        // Opcional: log normal para la primera request
+                        Object headersObj = XposedHelpers.callMethod(request, "headers");
+                        StringBuilder headersStr = new StringBuilder();
+                        if (headersObj != null) {
+                            int size = (int) XposedHelpers.callMethod(headersObj, "size");
+                            for (int i = 0; i < size; i++) {
+                                String name = (String) XposedHelpers.callMethod(headersObj, "name", i);
+                                String value = (String) XposedHelpers.callMethod(headersObj, "value", i);
+                                headersStr.append(name).append(": ").append(value).append(" | ");
+                            }
+                        }
+
+                        XposedBridge.log("📤 OkHttp Request permitida:\nURL: " + url + "\nMétodo: " + method +
+                                "\nHeaders: " + headersStr.toString());
+                    }
+                });
+
+    }
+}
